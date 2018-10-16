@@ -1,0 +1,173 @@
+%test comment
+\documentclass{article}
+\usepackage{rotating}
+\usepackage{graphics}
+\usepackage{latexsym}
+\usepackage{color}
+\usepackage{listings} % allows for importing code scripts into the tex file
+
+% Approximately 1 inch borders all around
+\setlength\topmargin{-.56in}
+\setlength\evensidemargin{0in}
+\setlength\oddsidemargin{0in}
+\setlength\textwidth{6.49in}
+\setlength\textheight{8.6in}
+
+% Options for code listing; from Patrick DeJesus, October 2016
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\lstdefinestyle{mystyle}{
+	backgroundcolor=\color{backcolour},   commentstyle=\color{codegreen},
+	keywordstyle=\color{magenta},
+	numberstyle=\tiny\color{codegray},
+	stringstyle=\color{codepurple},
+	basicstyle=\footnotesize,
+	breakatwhitespace=false,         
+	breaklines=true,                 
+	captionpos=b,                    
+	keepspaces=true,                 
+	numbers=left,                    
+	numbersep=5pt,                  
+	showspaces=false,                
+	showstringspaces=false,
+	showtabs=false,                  
+	tabsize=2
+}
+%"mystyle" code listing set
+\lstset{style=mystyle}
+%\lstset{inputpath=appendix/}
+
+
+\title{Safe Water Work Expolatory Data analysis- Draft1 } 
+
+\begin{document} 
+\maketitle
+
+% Code to start knitr
+<<include=FALSE>>=
+  library(knitr)
+opts_chunk$set(
+  concordance=TRUE
+)
+@
+
+<<>>=
+# Expolatory Data Analysis Regression: modeling and model diagnostics
+# Load libraries
+library(MASS)
+library(ggplot2)
+library(corrplot)
+library(carData)
+library(car)
+library(tidyr)
+rm(list=ls(all=TRUE)) # remove all previous objects from memory
+options(warn=-1)  # forces R to ignore all warning messages
+# Read in data, remove missing data
+database<-read.csv(choose.files(), header = T)
+#[50, 10]
+#Attaching the data base 
+database<-na.omit(database)
+#[14, 10]
+#summary of the data 
+
+attach(database)
+summary(database)
+
+## Preliminaries
+#review the data set.
+names(database)
+# summary of the log reduction value 
+
+## Regression model on split data set 
+#Transformation which might be needed 
+Depth<-Depth..m.
+Depth2<-Depth..m.^2
+ldepth = ifelse(Depth>0, log(Depth+1), -log(-Depth+1))
+Log_R<-log10_removal
+Log_R_sq<-log10_removal^(1/2)
+Log_R2<-log10_removal^2
+Temp<-Average.Annual.Air.Temperature..Â.C.
+Temp2<-(Average.Annual.Air.Temperature..Â.C.)^2
+
+
+#histogram of the log10_removal 
+hist(Log_R)
+hist(Log_R_sq)
+hist(Log_R2)
+@
+Since the $Log_R$ satisfies normality assumtion we move ahead with $Log_R$ as our predictor variable.
+\newline But as the number of variables goes higher we have 
+to make transformation for $log_{reduction}$ value.
+
+<<>>=
+# Categorical variables in regression
+# For illustration purposes, we will use no subset
+# contrast to a reference level or baseline 
+technology_D=factor(technology_description) # tell R this variable is categorical
+# tabulate the categorical variable
+table(technology_D) 
+# Parallel boxplots with box width a function of sample size
+plot(technology_D,Log_R, col="cyan", varwidth=T,
+     ylab="Log_R",xlab="technology_D")
+# Average log_R by technology_D
+tapply(technology_D,Log_R, mean)
+fitc = lm(formula = Log_R ~ technology_D, data=database)
+
+#Depth vs Log_R
+plot(Depth,Log_R, xlab = "Depth", ylab= "Log Reduction")
+lines(lowess(Depth,Log_R), col="green")
+P2<-qplot(Depth,Log_R_sq,xlab = "Depth", ylab= "Log Reduction")
+lines(lowess(Depth,Log_R_sq), col="blue")
+#temp vs log_R
+plot(Temp,Log_R,xlab = "Annual Air Temp", ylab= "Log Reduction" )
+plot(Temp2,Log_R_sq,xlab = "Annual Air Temp", ylab= "Log Reduction" )
+
+
+# Model selection
+# stepAIC 
+
+fit<-lm(Log_R ~ Depth+Depth2+Temp+Temp2+factor(technology_description)+Length..m.)
+summary(fit)
+
+# Try AIC model selection
+stepAIC(fit, direction = "both")
+@
+From the AIC model selection we include depth in our final model as 
+depth is significant in $log_R$
+<<>>=
+#Model Diagonostic 
+
+# Model chosen to assess
+fit11b<-lm(Log_R~Depth)
+summary(fit11b)
+
+# Residual plot
+plot(predict(fit11b), rstudent(fit11b), ylab="Studentized Residuals", xlab="Predicted")
+identify(predict(fit11b), rstudent(fit11b), labels=row.names(database)) # 'escape to finish'
+predict(fit11b)[rstudent(fit11b)==min(rstudent(fit11b))]
+sresid <- studres(fit11b)
+hist(sresid, freq=FALSE, main="Distribution of Studentized Residuals")
+xfit<-seq(min(sresid),max(sresid),length=40)
+yfit<-dnorm(xfit)
+lines(xfit, yfit)
+# Q-Q plot for studentized resid
+qqPlot(fit11b, main="QQ Plot", ylab="Studentized Residuals")
+# Influential Observations. 
+# Cook's D plot
+# identify D values > 4/(n-k-1)
+cutoff <- 4/((nrow(mtcars)-length(fit11b$coefficients)-2))
+plot(fit11b, which=4, cook.levels=cutoff) # influence Plot
+database[6,]
+database[12,]
+#rentention time is small
+@
+
+
+
+
+
+
+
+\end{document}
